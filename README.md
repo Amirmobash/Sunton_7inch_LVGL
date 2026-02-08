@@ -277,12 +277,14 @@ void setup() {
 
 ---
 
-## 🔗 **Nützliche Links**
+## 🔗 **Nützliche Links Amir Mobasheraghdam**
 
 ### **Offizielle Repositories:**
 1. **LovyanGFX**: https://github.com/lovyan03/LovyanGFX
 2. **LVGL**: https://github.com/lvgl/lvgl
 3. **Beispielprojekt**: https://github.com/HarryVienna/Makerfabs-Sunton-ESP32-S3-7-Display-with-LovyanGFX-and-LVGL
+4. https://buchshop.bod.de/ergebnis-automation-fuer-die-bundesliga-mit-n8n-amir-mobasheraghdam-9783695724925
+5. https://amzn.eu/d/0aAtg00j
 
 ### **Dokumentation:**
 - LVGL Docs: https://docs.lvgl.io
@@ -338,3 +340,4 @@ Bei Problemen:
 4. ESP32 Forum konsultieren
 
 **Viel Erfolg mit Ihrem Jingcai ESP32-8048S070C Display!** 🚀
+
