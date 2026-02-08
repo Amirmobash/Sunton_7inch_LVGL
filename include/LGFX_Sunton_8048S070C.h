@@ -1,6 +1,7 @@
 #pragma once
 
-#define LGFX_USE_V1
+#include <Arduino.h>
+#include <driver/i2c.h>   // برای I2C_NUM_0
 #include <LovyanGFX.hpp>
 
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
@@ -63,7 +64,7 @@ public:
       cfg.pin_hsync   = GPIO_NUM_39;
       cfg.pin_pclk    = GPIO_NUM_42;
 
-      // Pixel clock (اگر تصویر ناپایدار بود 10-16MHz تست کن)
+      // Pixel clock
       cfg.freq_write  = 12000000;
 
       // Timing
@@ -101,7 +102,7 @@ public:
       cfg.bus_shared = false;
       cfg.offset_rotation = 0;
 
-      cfg.i2c_port = I2C_NUM_0;
+      cfg.i2c_port = I2C_NUM_0;   // حالا شناخته می‌شود
       cfg.pin_sda  = GPIO_NUM_19;
       cfg.pin_scl  = GPIO_NUM_20;
       cfg.pin_int  = GPIO_NUM_NC;
