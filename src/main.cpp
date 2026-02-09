@@ -3,16 +3,17 @@
 #include <lvgl.h>
 #include "LGFX_Sunton_8048S070C.h"
 
-/* ===================== PINS (EDIT) ===================== */
-static constexpr gpio_num_t PIN_SENSOR_IN = GPIO_NUM_10;  // PC817 output -> ESP32 GPIO
-static constexpr gpio_num_t PIN_MOTOR_OUT = GPIO_NUM_12;  // ESP32 GPIO -> motor driver
+/* ===================== BEST PINS (CONFIRMED FROM YOUR BOARD PHOTO) ===================== */
+/* PC817 OUTPUT -> P5 IO17  |  MOTOR RELAY DRIVER IN -> P2 IO12 */
+static constexpr gpio_num_t PIN_SENSOR_IN = GPIO_NUM_17;   // P5: IO17
+static constexpr gpio_num_t PIN_MOTOR_OUT = GPIO_NUM_12;   // P2: IO12
 
-static constexpr bool SENSOR_ACTIVE_LOW = true;           // PC817 + pullup typically active-low
-static constexpr bool MOTOR_ACTIVE_HIGH = true;           // typical driver active-high
+static constexpr bool SENSOR_ACTIVE_LOW = true;            // PC817 open-collector + pullup => active LOW
+static constexpr bool MOTOR_ACTIVE_HIGH = true;            // typical relay/MOSFET module IN active HIGH
 
 /* Safety */
-static constexpr uint32_t NO_PULSE_TIMEOUT_MS = 5000;
-static constexpr uint32_t MIN_PULSE_GAP_US_HARD = 500;
+static constexpr uint32_t NO_PULSE_TIMEOUT_MS = 5000;      // running but no pulses => error
+static constexpr uint32_t MIN_PULSE_GAP_US_HARD = 500;     // reject very fast noise
 
 /* ===================== DISPLAY/LVGL ===================== */
 static const uint16_t SCREEN_W = 800;
@@ -23,25 +24,25 @@ static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf1[SCREEN_W * 12];
 static lv_color_t buf2[SCREEN_W * 12];
 
-/* Fonts (ASCII only -> default OK) */
+/* Fonts (ASCII only -> default font OK) */
 static const lv_font_t* F16 = LV_FONT_DEFAULT;
 static const lv_font_t* F24 = LV_FONT_DEFAULT;
-static const lv_font_t* F48 = LV_FONT_DEFAULT;   // اگر لازم شد در lv_conf.h فعالش کن
+static const lv_font_t* F48 = LV_FONT_DEFAULT;   // اگر خواستی بزرگ‌تر/واضح‌تر شود، در lv_conf.h فونت 48 را فعال کن
 
-/* ===================== THEME ===================== */
+/* Theme */
 static lv_color_t C_ORANGE;
 static lv_color_t C_WHITE;
 static lv_color_t C_BLACK;
 static lv_color_t C_GRAY;
 static lv_color_t C_RED;
 
-/* ===================== PERSISTENCE ===================== */
+/* Persistence */
 static Preferences prefs;
 static const char* NVS_NS    = "bandware";
 static const char* KEY_ZIEL  = "ziel";
 static const char* KEY_DEBMS = "debms";
 
-/* ===================== STATE ===================== */
+/* State */
 enum class State : uint8_t { IDLE, RUNNING, DONE, STOPPED, ERROR };
 
 static volatile uint32_t isr_count = 0;
@@ -56,25 +57,25 @@ static bool motor_on = false;
 static uint32_t last_pulse_seen_ms = 0;
 static char err_msg[128] = {0};
 
-/* ===================== UI Screens ===================== */
+/* Screens */
 static lv_obj_t* scr_main = nullptr;
 static lv_obj_t* scr_set  = nullptr;
 static lv_obj_t* scr_done = nullptr;
 static lv_obj_t* scr_err  = nullptr;
 
 /* Main widgets */
-static lv_obj_t* lbl_ist_big = nullptr;
+static lv_obj_t* lbl_ist_big  = nullptr;
 static lv_obj_t* lbl_ziel_big = nullptr;
-static lv_obj_t* lbl_status = nullptr;
-static lv_obj_t* bar = nullptr;
+static lv_obj_t* lbl_status   = nullptr;
+static lv_obj_t* bar          = nullptr;
 
 /* Settings widgets */
-static lv_obj_t* ta_ziel = nullptr;
-static lv_obj_t* ta_deb  = nullptr;
-static lv_obj_t* kb      = nullptr;
+static lv_obj_t* ta_ziel   = nullptr;
+static lv_obj_t* ta_deb    = nullptr;
+static lv_obj_t* kb        = nullptr;
 static lv_obj_t* btn_clear = nullptr;
 
-/* Done/Error */
+/* Done/Error widgets */
 static lv_obj_t* lbl_done = nullptr;
 static lv_obj_t* lbl_err  = nullptr;
 
@@ -133,10 +134,12 @@ static void IRAM_ATTR sensor_isr()
 static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
 {
   if (gfx.getStartCount() == 0) gfx.startWrite();
+
   gfx.pushImageDMA(area->x1, area->y1,
                    area->x2 - area->x1 + 1,
                    area->y2 - area->y1 + 1,
                    (lgfx::rgb565_t *)&color_p->full);
+
   lv_disp_flush_ready(disp);
 }
 
@@ -236,9 +239,9 @@ static void sync_count()
 
 static void update_main_ui()
 {
-  lv_label_set_text_fmt(lbl_ist_big, "%lu", (unsigned long)ist);
+  lv_label_set_text_fmt(lbl_ist_big,  "%lu", (unsigned long)ist);
   lv_label_set_text_fmt(lbl_ziel_big, "%lu", (unsigned long)ziel);
-  lv_label_set_text_fmt(lbl_status, "Status: %s", stateText(st));
+  lv_label_set_text_fmt(lbl_status,   "Status: %s", stateText(st));
 
   int pct = 0;
   if (ziel > 0) {
@@ -253,8 +256,8 @@ static void set_error(const char* msg)
 {
   motorWrite(false);
   st = State::ERROR;
-  strncpy(err_msg, msg, sizeof(err_msg)-1);
-  err_msg[sizeof(err_msg)-1] = 0;
+  strncpy(err_msg, msg, sizeof(err_msg) - 1);
+  err_msg[sizeof(err_msg) - 1] = 0;
   lv_label_set_text(lbl_err, err_msg);
   go(scr_err, LV_SCR_LOAD_ANIM_MOVE_LEFT);
 }
@@ -335,7 +338,7 @@ static void on_open_settings(lv_event_t*)
 
 static void on_clear_in_settings(lv_event_t*)
 {
-  // فقط در Settings: پاک کردن سريع Zielmenge
+  // CLEAR فقط در Settings: متن Zielmenge را خالي کن
   if (!ta_ziel) return;
   lv_textarea_set_text(ta_ziel, "");
   lv_textarea_set_cursor_pos(ta_ziel, LV_TEXTAREA_CURSOR_LAST);
@@ -376,7 +379,7 @@ static void build_main()
   scr_main = lv_obj_create(nullptr);
   style_screen(scr_main);
 
-  make_header(scr_main, "Bandware Zaehler", "Uebersicht: IST / Ziel + Start/Stop/Reset");
+  make_header(scr_main, "Bandware Zaehler", "IST / Ziel + Start/Stop/Reset");
 
   lv_obj_t* frame = lv_obj_create(scr_main);
   lv_obj_set_size(frame, 780, 300);
@@ -386,7 +389,7 @@ static void build_main()
   lv_obj_set_style_border_color(frame, C_ORANGE, 0);
   lv_obj_set_style_pad_all(frame, 16, 0);
 
-  // IST left
+  // IST
   lv_obj_t* col_ist = lv_obj_create(frame);
   lv_obj_set_size(col_ist, 360, 185);
   lv_obj_align(col_ist, LV_ALIGN_TOP_LEFT, 0, 0);
@@ -405,7 +408,7 @@ static void build_main()
   lv_obj_set_style_text_color(lbl_ist_big, C_ORANGE, 0);
   lv_obj_align(lbl_ist_big, LV_ALIGN_TOP_LEFT, 0, 55);
 
-  // ZIEL right (big)
+  // ZIEL (big)
   lv_obj_t* col_z = lv_obj_create(frame);
   lv_obj_set_size(col_z, 380, 185);
   lv_obj_align(col_z, LV_ALIGN_TOP_RIGHT, 0, 0);
@@ -424,7 +427,7 @@ static void build_main()
   lv_obj_set_style_text_color(lbl_ziel_big, C_BLACK, 0);
   lv_obj_align(lbl_ziel_big, LV_ALIGN_TOP_LEFT, 0, 55);
 
-  // progress + status
+  // Progress
   bar = lv_bar_create(frame);
   lv_obj_set_size(bar, 748, 28);
   lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -52);
@@ -433,6 +436,7 @@ static void build_main()
   lv_obj_set_style_bg_opa(bar, LV_OPA_20, LV_PART_MAIN);
   lv_obj_set_style_bg_color(bar, C_ORANGE, LV_PART_INDICATOR);
 
+  // Status
   lbl_status = lv_label_create(frame);
   lv_label_set_text(lbl_status, "Status: Bereit");
   lv_obj_set_style_text_font(lbl_status, F24, 0);
@@ -474,7 +478,6 @@ static void build_settings()
 
   make_header(scr_set, "Einstellungen", "Ziel und Entprellung setzen und speichern");
 
-  // Card area (left side), keyboard bottom
   lv_obj_t* card = lv_obj_create(scr_set);
   lv_obj_set_size(card, 780, 250);
   lv_obj_align(card, LV_ALIGN_TOP_MID, 0, 78);
@@ -483,7 +486,7 @@ static void build_settings()
   lv_obj_set_style_border_color(card, C_ORANGE, 0);
   lv_obj_set_style_pad_all(card, 18, 0);
 
-  // Ziel row + CLEAR button (HERE ONLY)
+  // Ziel + CLEAR (ONLY HERE)
   lv_obj_t* l1 = lv_label_create(card);
   lv_label_set_text(l1, "Zielmenge:");
   lv_obj_set_style_text_font(l1, F24, 0);
@@ -499,7 +502,7 @@ static void build_settings()
   lv_obj_align(btn_clear, LV_ALIGN_TOP_RIGHT, 0, 45);
   lv_obj_add_event_cb(btn_clear, [](lv_event_t*){ on_clear_in_settings(nullptr); }, LV_EVENT_CLICKED, nullptr);
 
-  // Debounce row
+  // Debounce
   lv_obj_t* l2 = lv_label_create(card);
   lv_label_set_text(l2, "Entprellung (ms):");
   lv_obj_set_style_text_font(l2, F24, 0);
@@ -511,6 +514,7 @@ static void build_settings()
   lv_textarea_set_one_line(ta_deb, true);
   lv_obj_set_style_text_font(ta_deb, F24, 0);
 
+  // Keyboard
   kb = lv_keyboard_create(scr_set);
   lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
   lv_obj_set_size(kb, 780, 180);
@@ -586,15 +590,17 @@ static void build_error()
   }, LV_EVENT_CLICKED, nullptr);
 }
 
-/* ===================== Setup/Loop ===================== */
+/* ===================== Setup / Loop ===================== */
 void setup()
 {
   Serial.begin(115200);
-  delay(200);
+  delay(150);
 
+  // Motor OFF first (failsafe)
   pinMode((int)PIN_MOTOR_OUT, OUTPUT);
   motorWrite(false);
 
+  // Sensor input
   if (SENSOR_ACTIVE_LOW) pinMode((int)PIN_SENSOR_IN, INPUT_PULLUP);
   else                   pinMode((int)PIN_SENSOR_IN, INPUT_PULLDOWN);
 
@@ -610,15 +616,15 @@ void setup()
 
   static lv_disp_drv_t disp_drv;
   lv_disp_drv_init(&disp_drv);
-  disp_drv.hor_res = SCREEN_W;
-  disp_drv.ver_res = SCREEN_H;
+  disp_drv.hor_res  = SCREEN_W;
+  disp_drv.ver_res  = SCREEN_H;
   disp_drv.flush_cb = my_disp_flush;
   disp_drv.draw_buf = &draw_buf;
   lv_disp_drv_register(&disp_drv);
 
   static lv_indev_drv_t indev_drv;
   lv_indev_drv_init(&indev_drv);
-  indev_drv.type = LV_INDEV_TYPE_POINTER;
+  indev_drv.type    = LV_INDEV_TYPE_POINTER;
   indev_drv.read_cb = my_touchpad_read;
   lv_indev_drv_register(&indev_drv);
 
@@ -635,20 +641,23 @@ void setup()
 
   lv_scr_load(scr_main);
 
+  // init state
   st = State::IDLE;
   noInterrupts(); isr_count = 0; interrupts();
   ist = 0;
   update_main_ui();
 
-  // init settings page textareas (values)
-  // (after build_settings)
+  // fill settings fields initially
   char tmp[16];
   snprintf(tmp, sizeof(tmp), "%lu", (unsigned long)ziel);
   lv_textarea_set_text(ta_ziel, tmp);
   snprintf(tmp, sizeof(tmp), "%u", (unsigned)deb_ms);
   lv_textarea_set_text(ta_deb, tmp);
 
+  // ISR attach
   attachInterrupt((int)PIN_SENSOR_IN, sensor_isr, SENSOR_ACTIVE_LOW ? FALLING : RISING);
+
+  Serial.println("BANDWARE READY (Sensor=IO17, Motor=IO12)");
 }
 
 void loop()
@@ -656,6 +665,7 @@ void loop()
   lv_timer_handler();
   delay(5);
 
+  // failsafe
   if (st == State::ERROR && motor_on) motorWrite(false);
 
   static uint32_t last = 0;
