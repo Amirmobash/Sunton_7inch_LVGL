@@ -8,7 +8,7 @@
 static constexpr gpio_num_t PIN_SENSOR_IN = GPIO_NUM_17;   // P5: IO17
 static constexpr gpio_num_t PIN_MOTOR_OUT = GPIO_NUM_12;   // P2: IO12
 
-static constexpr bool SENSOR_ACTIVE_LOW = true;            // PC817 open-collector + pullup => active LOW
+static constexpr bool SENSOR_ACTIVE_LOW = false;            // PC817 open-collector + pullup => active LOW
 static constexpr bool MOTOR_ACTIVE_HIGH = true;            // typical relay/MOSFET module IN active HIGH
 
 /* Safety */
