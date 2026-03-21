@@ -1,343 +1,242 @@
-## 📋 **Technische Daten**
-- **Mikrocontroller**: ESP32-S3 (240MHz, 16MB Flash, 8MB PSRAM)
-- **Display**: 7 Zoll TN-Panel, 800×480 Pixel, RGB565-Schnittstelle
-- **Touch**: Kapazitiv, 5-Punkt, GT911 Controller
-- **Anschlüsse**: USB-C, SD-Kartensteckplatz, I2S Audio-Ausgang
-- **Besonderheit**: Parallele RGB-Schnittstelle (kein SPI)
+# Bandware Counter für Sunton ESP32-S3 (7" Display)
+
+## 📋 Technische Daten
+- **Mikrocontroller**: ESP32-S3 (240 MHz, 16 MB Flash, 8 MB PSRAM)
+- **Display**: 7 Zoll TN‑Panel, 800×480 Pixel, RGB565‑Schnittstelle
+- **Touch**: kapazitiv, GT911 Controller (I2C)
+- **Anschlüsse**: USB‑C, SD‑Kartensteckplatz, I2S Audio‑Ausgang
+- **Besonderheit**: parallele RGB‑Schnittstelle (kein SPI)
 
 ---
 
-## 🚀 **Schnellstart mit PlatformIO**
+## 🚀 Projektübersicht
+Das Projekt realisiert einen **Bandzähler** für industrielle Anwendungen:
+- Ein externer Sensor (z. B. PC817) liefert Impulse pro Band‑Stück.
+- Ein Relais oder MOSFET steuert den Bandantrieb (Motor).
+- Ein grafisches Touch‑Interface (LVGL) zeigt Ist‑Stand, Zielmenge, Status und Fehlermeldungen an.
+- Alle Einstellungen werden persistent in der NVS gespeichert.
 
-### **1. Projekt einrichten**
+**Hardware‑Pins:**
+| Funktion   | GPIO |
+|------------|------|
+| Sensor‑Eingang | 17 (P5) |
+| Motor‑Ausgang  | 12 (P2) |
+| Touch SDA      | 19    |
+| Touch SCL      | 20    |
+| Touch Reset    | 38    |
+| Backlight      | 2     |
+
+---
+
+## ⚙️ PlatformIO Projekt einrichten
+
+### `platformio.ini`
 ```ini
-; platformio.ini
-[env:sunton_esp32_s3]
-platform = espressif32@6.3.1
-board = esp32-s3-devkitc-1
+[env:sunton_s3]
+platform = espressif32@6.9.0
+board = sunton_s3
 framework = arduino
+
+upload_port = COM4
+monitor_port = COM4
 monitor_speed = 115200
+monitor_filters = esp32_exception_decoder
 
-; Wichtige Compiler-Flags
-build_flags = 
-    -DBOARD_HAS_PSRAM
-    -DARDUINO_USB_CDC_ON_BOOT=1
-    -DARDUINO_USB_MODE=1
-    -DCORE_DEBUG_LEVEL=3
+build_unflags =
+  -std=gnu++11
 
-; Bibliotheken
-lib_deps = 
-    lovyan03/LovyanGFX@^1.1.7
-    lvgl/lvgl@^8.3.7
+build_flags =
+  -Os
+  -std=gnu++17
+  -DCORE_DEBUG_LEVEL=3
+  -DLGFX_USE_V1
+  -DLV_CONF_INCLUDE_SIMPLE
+  -DLV_CONF_SUPPRESS_DEFINE_CHECK
+  -I./src
+
+lib_deps =
+  https://github.com/lovyan03/LovyanGFX.git#1.1.7
+  lvgl/lvgl@8.3.7
 ```
 
-### **2. Hauptprogramm (main.cpp)**
+**Wichtig:**  
+- Das Board `sunton_s3` ist in der PlatformIO‑Board‑Liste enthalten und konfiguriert PSRAM sowie Flash‑Mode richtig.  
+- Die Compiler‑Flags `-DLV_CONF_INCLUDE_SIMPLE` und `-I./src` erlauben es, die `lv_conf.h` im Projekt‑Ordner `src` zu platzieren.
+
+---
+
+## 📁 Projektstruktur (Auszug)
+
+```
+projekt/
+├── platformio.ini
+├── README.md
+├── src/
+│   ├── main.cpp
+│   ├── LGFX_Sunton_8048S070C.h    # LovyanGFX‑Treiber
+│   └── lv_conf.h                   # LVGL‑Konfiguration
+└── ...
+```
+
+---
+
+## 🔌 Hardware‑Treiber: `LGFX_Sunton_8048S070C.h`
+
+Die Datei enthält die vollständige LovyanGFX‑Konfiguration für das Sunton‑Display:
+
+```cpp
+#pragma once
+#include <Arduino.h>
+#include <driver/i2c.h>
+#include <LovyanGFX.hpp>
+#include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
+#include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
+
+class LGFX : public lgfx::LGFX_Device
+{
+public:
+  lgfx::Bus_RGB     _bus_instance;
+  lgfx::Panel_RGB   _panel_instance;
+  lgfx::Light_PWM   _light_instance;
+  lgfx::Touch_GT911 _touch_instance;
+
+  LGFX(void) { ... }   // hier werden alle Pins und Timings gesetzt
+};
+```
+
+- RGB‑Datenpins: `GPIO 15,7,6,5,4,9,46,3,8,16,1,14,21,47,48,45`  
+- Steuerpins: `HSYNC=39, VSYNC=40, DE=41, PCLK=42`  
+- Touch: I2C‑Port 0, SDA=19, SCL=20, Reset=38  
+- Backlight: GPIO 2
+
+---
+
+## 🧠 LVGL‑Konfiguration (`lv_conf.h`)
+
+Die wichtigsten Einstellungen:
+
+```c
+#define LV_COLOR_DEPTH 16
+#define LV_COLOR_16_SWAP 0
+
+#define LV_TICK_CUSTOM 1
+#define LV_TICK_CUSTOM_INCLUDE "Arduino.h"
+#define LV_TICK_CUSTOM_SYS_TIME_EXPR (millis())
+
+#define LV_MEM_SIZE (140U * 1024U)
+
+#define LV_FONT_MONTSERRAT_14  1
+#define LV_FONT_MONTSERRAT_24  1
+#define LV_FONT_MONTSERRAT_48  1
+#define LV_FONT_DEFAULT &lv_font_montserrat_14
+```
+
+---
+
+## 📄 Hauptprogramm (`main.cpp`) – Kernfunktionen
+
+Der Code realisiert einen Zustandsautomaten mit den Zuständen:
+- `IDLE` – bereit
+- `RUNNING` – Motor läuft, Zähler zählt Impulse
+- `DONE` – Ziel erreicht
+- `STOPPED` – manuell gestoppt
+- `ERROR` – Fehler (keine Impulse, Sensor defekt)
+
+**Wichtige Teile:**
+
 ```cpp
 #include <Arduino.h>
-#include <LovyanGFX.hpp>
+#include <Preferences.h>
 #include <lvgl.h>
-#include <Wire.h>
+#include "LGFX_Sunton_8048S070C.h"
 
-// Display-Konfiguration für Jingcai/Sunton
-class LGFX : public lgfx::LGFX_Device {
-public:
-    lgfx::Bus_RGB   bus;
-    lgfx::Panel_RGB panel;
-    lgfx::Light_PWM light;
-    lgfx::Touch_GT911 touch;
+static constexpr gpio_num_t PIN_SENSOR_IN = GPIO_NUM_17;   // P5: IO17
+static constexpr gpio_num_t PIN_MOTOR_OUT = GPIO_NUM_12;   // P2: IO12
 
-    LGFX() {
-        // Panel-Einstellungen
-        {
-            auto cfg = panel.config();
-            cfg.panel_width   = 800;
-            cfg.panel_height  = 480;
-            cfg.memory_width  = 800;
-            cfg.memory_height = 480;
-            panel.config(cfg);
-        }
+static constexpr bool SENSOR_ACTIVE_LOW = false;   // PC817 open‑collector + Pullup → active LOW
+static constexpr bool MOTOR_ACTIVE_HIGH = true;    // Relais / MOSFET IN active HIGH
 
-        // RGB-Bus-Einstellungen (WICHTIG!)
-        {
-            auto cfg = bus.config();
-            // Daten-Pins
-            cfg.pin_d0  = GPIO_NUM_15;  // B0
-            cfg.pin_d1  = GPIO_NUM_7;   // B1
-            cfg.pin_d2  = GPIO_NUM_6;   // B2
-            cfg.pin_d3  = GPIO_NUM_5;   // B3
-            cfg.pin_d4  = GPIO_NUM_4;   // B4
-            cfg.pin_d5  = GPIO_NUM_9;   // G0
-            cfg.pin_d6  = GPIO_NUM_46;  // G1
-            cfg.pin_d7  = GPIO_NUM_3;   // G2
-            cfg.pin_d8  = GPIO_NUM_8;   // G3
-            cfg.pin_d9  = GPIO_NUM_16;  // G4
-            cfg.pin_d10 = GPIO_NUM_1;   // G5
-            cfg.pin_d11 = GPIO_NUM_14;  // R0
-            cfg.pin_d12 = GPIO_NUM_21;  // R1
-            cfg.pin_d13 = GPIO_NUM_47;  // R2
-            cfg.pin_d14 = GPIO_NUM_48;  // R3
-            cfg.pin_d15 = GPIO_NUM_45;  // R4
+static constexpr uint32_t NO_PULSE_TIMEOUT_MS = 5000;   // Lauf ohne Impuls → Fehler
+static constexpr uint32_t MIN_PULSE_GAP_US_HARD = 500;  // Entprellung
 
-            // Steuer-Pins
-            cfg.pin_henable = GPIO_NUM_41;  // DE
-            cfg.pin_vsync   = GPIO_NUM_40;  // VSYNC
-            cfg.pin_hsync   = GPIO_NUM_39;  // HSYNC
-            cfg.pin_pclk    = GPIO_NUM_42;  // PCLK
-            
-            // Timing (optimiert für 800x480)
-            cfg.freq_write = 12000000;  // 12MHz
-            
-            cfg.hsync_polarity    = 0;
-            cfg.hsync_front_porch = 8;
-            cfg.hsync_pulse_width = 2;
-            cfg.hsync_back_porch  = 43;
-            
-            cfg.vsync_polarity    = 0;
-            cfg.vsync_front_porch = 8;
-            cfg.vsync_pulse_width = 2;
-            cfg.vsync_back_porch  = 12;
-            
-            cfg.pclk_idle_high    = 1;
-            bus.config(cfg);
-            panel.setBus(&bus);
-        }
+static volatile uint32_t isr_count = 0;
 
-        // Hintergrundbeleuchtung
-        {
-            auto cfg = light.config();
-            cfg.pin_bl = GPIO_NUM_2;  // Backlight-Pin
-            light.config(cfg);
-            panel.light(&light);
-        }
-
-        // Touch-Controller
-        {
-            auto cfg = touch.config();
-            cfg.i2c_port = I2C_NUM_0;
-            cfg.pin_sda  = GPIO_NUM_19;
-            cfg.pin_scl  = GPIO_NUM_20;
-            cfg.pin_rst  = GPIO_NUM_38;  // Reset-Pin
-            cfg.x_max    = 800;
-            cfg.y_max    = 480;
-            touch.config(cfg);
-            panel.setTouch(&touch);
-        }
-
-        setPanel(&panel);
-    }
-};
-
-// Globale Instanzen
-static LGFX tft;
-static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf1[800 * 10];
-static lv_color_t buf2[800 * 10];
-
-// LVGL Display-Funktion
-void display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
-    uint32_t w = area->x2 - area->x1 + 1;
-    uint32_t h = area->y2 - area->y1 + 1;
-
-    tft.startWrite();
-    tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.writePixels((lgfx::rgb565_t*)color_p, w * h);
-    tft.endWrite();
-
-    lv_disp_flush_ready(disp);
-}
-
-// Touch-Read-Funktion
-void touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
-    uint16_t touchX, touchY;
-    bool touched = tft.getTouch(&touchX, &touchY);
-
-    if(touched) {
-        data->state = LV_INDEV_STATE_PR;
-        data->point.x = touchX;
-        data->point.y = touchY;
-    } else {
-        data->state = LV_INDEV_STATE_REL;
-    }
-}
-
-void setup() {
-    Serial.begin(115200);
-    delay(1000);
-    Serial.println("Starte Jingcai ESP32-8048S070C...");
-
-    // I2C für Touch initialisieren
-    Wire.begin(19, 20);
-    Wire.setClock(400000);
-
-    // Display initialisieren
-    tft.init();
-    tft.setBrightness(128);
-    tft.setRotation(0);
-
-    // LVGL initialisieren
-    lv_init();
-    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, 800 * 10);
-
-    // Display-Treiber registrieren
-    static lv_disp_drv_t disp_drv;
-    lv_disp_drv_init(&disp_drv);
-    disp_drv.hor_res = 800;
-    disp_drv.ver_res = 480;
-    disp_drv.flush_cb = display_flush;
-    disp_drv.draw_buf = &draw_buf;
-    lv_disp_drv_register(&disp_drv);
-
-    // Touch-Treiber registrieren
-    static lv_indev_drv_t indev_drv;
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    indev_drv.read_cb = touch_read;
-    lv_indev_drv_register(&indev_drv);
-
-    // Einfache UI erstellen
-    lv_obj_t *label = lv_label_create(lv_scr_act());
-    lv_label_set_text(label, "Jingcai ESP32-8048S070C\nDisplay-Test erfolgreich!");
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
-    
-    Serial.println("System bereit!");
-}
-
-void loop() {
-    lv_timer_handler();
-    delay(5);
+static void IRAM_ATTR sensor_isr() {
+  const uint32_t now = esp_timer_get_time();
+  if ((now - isr_last_us) < MIN_PULSE_GAP_US_HARD) return;
+  // zusätzliche software‑Entprellung über deb_ms (aus Einstellungen)
+  if ((now - isr_last_us) < (uint32_t)deb_ms * 1000UL) return;
+  isr_last_us = now;
+  isr_count++;
 }
 ```
 
+- Die Einstellungen (Zielmenge, Entprellzeit) werden mit der `Preferences`‑Bibliothek gespeichert.  
+- Das UI besteht aus vier Screens: Hauptbildschirm, Einstellungen, Fertig‑Screen, Fehler‑Screen.  
+- Touch‑Ereignisse werden von LVGL über die `my_touchpad_read`‑Funktion ausgelesen.
+
 ---
 
-## 🔧 **Wichtige Einstellungen für Arduino IDE**
+## 🖱️ Bedienung des Zählers
 
-### **Board-Konfiguration:**
+| Button    | Funktion |
+|-----------|----------|
+| **START** | Motor ein, Zähler läuft (sofern nicht Fehler) |
+| **STOP**  | Motor aus, Zustand auf `STOPPED` |
+| **RESET** | Zählerstand = 0, Zustand auf `IDLE`, Motor aus |
+| **EINSTELL.** | Öffnet den Einstellungsbildschirm (nur im IDLE‑Zustand) |
+
+Im Einstellungsbildschirm:
+- Zielmenge (1 … 999.999)
+- Entprellzeit (1 … 100 ms)
+- Ein virtuelles Zahlen‑Keyboard erleichtert die Eingabe.
+- Mit **CLEAR** wird das Ziel‑Feld geleert.
+- **ENTER** speichert und kehrt zum Hauptbildschirm zurück.
+
+---
+
+## 🔧 Erste Schritte & Upload
+
+1. **PlattformIO** mit dem aktuellen Projektordner öffnen.
+2. USB‑Kabel an den ESP32‑S3 anschließen.
+3. **Board‑Auswahl:** `sunton_s3` (automatisch über `platformio.ini`).
+4. **Upload:**  
+   - Falls der Upload nicht startet, **BOOT**‑Taste gedrückt halten, **RST** kurz drücken, dann BOOT loslassen.
+5. **Serieller Monitor:** 115200 Baud. Dort werden Startmeldungen und evtl. Fehler ausgegeben.
+
+---
+
+## ⚠️ Häufige Probleme und Lösungen
+
+| Problem | Mögliche Ursache | Lösung |
+|---------|------------------|--------|
+| Display bleibt schwarz, Backlight leuchtet | Falsche RGB‑Pins oder Timing | Prüfe `LGFX_Sunton_8048S070C.h` – Pins 39‑42 (HSYNC, VSYNC, DE, PCLK) müssen korrekt sein. |
+| Touch funktioniert nicht | I2C‑Adresse falsch / Kabelbruch | Führe I2C‑Scanner aus (Adresse 0x5D für GT911). |
+| Zähler zählt nicht | Sensor‑Pin falsch oder falsche Polarität | Überprüfe `PIN_SENSOR_IN` und `SENSOR_ACTIVE_LOW` (PC817 = active LOW, Pullup am GPIO). |
+| Upload hängt | Bootloader nicht erreicht | BOOT‑Taste während des Uploads drücken (siehe oben). |
+| Motor schaltet nicht | Relais‑Modul benötigt HIGH? | Setze `MOTOR_ACTIVE_HIGH` entsprechend. |
+
+---
+
+## 🔗 Nützliche Links
+
+- **LovyanGFX**: https://github.com/lovyan03/LovyanGFX  
+- **LVGL**: https://github.com/lvgl/lvgl  
+- **Beispiel‑Projekt (Sunton)**: https://github.com/HarryVienna/Makerfabs-Sunton-ESP32-S3-7-Display-with-LovyanGFX-and-LVGL  
+- **ESP32‑S3 Technische Referenz**: https://www.espressif.com  
+- **Weiterführende Literatur**:  
+  *Automation für die Bundesliga mit n8n* – Amir Mobasheraghdam  
+  https://buchshop.bod.de/ergebnis-automation-fuer-die-bundesliga-mit-n8n-amir-mobasheraghdam-9783695724925  
+  https://amzn.eu/d/0aAtg00j
+
+---
+
+## 📞 Support
+
+Bei Problemen: Amir Mobasheraghdam
+1. Seriellen Monitor (115200 Baud) öffnen und Fehlermeldungen dokumentieren.
+2. Pin‑Belegung mit der tatsächlichen Verdrahtung vergleichen.
+3. Issue auf GitHub erstellen oder ESP32‑Forum konsultieren.
+
+**Viel Erfolg mit Ihrem Bandzähler!** 🚀
 ```
-Board: "ESP32S3 Dev Module"
-USB CDC On Boot: Enabled
-CPU Frequency: 240MHz
-Flash Size: 16MB
-PSRAM: OPI PSRAM
-Partition Scheme: 16M Flash (3M APP/9.9M FATFS)
-Upload Speed: 921600
-```
-
-### **Bibliotheken installieren Amir Mobasher:**
-1. **LovyanGFX** (Version 1.1.13+)
-2. **LVGL** (Version 8.3.7+)
-3. **Wire** (bereits installiert)
-
----
-
-## ⚠️ **Häufige Probleme und Lösungen**
-
-### **1. Display bleibt schwarz, aber Backlight leuchtet**
-**Problem**: RGB-Pins falsch konfiguriert  
-**Lösung**: Pins 39-42 (HSYNC, VSYNC, DE, PCLK) überprüfen
-
-### **2. Touch funktioniert nicht**
-```cpp
-// I2C-Scanner ausführen
-#include <Wire.h>
-void setup() {
-    Wire.begin(19, 20);
-    Serial.begin(115200);
-    for(uint8_t addr=1; addr<127; addr++) {
-        Wire.beginTransmission(addr);
-        if(Wire.endTransmission()==0) {
-            Serial.print("Gefunden: 0x");
-            Serial.println(addr, HEX);
-        }
-    }
-}
-```
-
-### **3. Upload hängt**
-**Bootloader-Modus aktivieren:**
-1. BOOT-Taste gedrückt halten
-2. RST-Taste kurz drücken
-3. BOOT-Taste loslassen
-4. Upload starten
-
----
-
-## 📊 **Pintabelle (Jingcai ESP32-8048S070C)**
-
-| Funktion | Pin | Alternative |
-|----------|-----|-------------|
-| Backlight | GPIO 2 | GPIO 45 |
-| HSYNC | GPIO 39 | - |
-| VSYNC | GPIO 40 | - |
-| DE | GPIO 41 | - |
-| PCLK | GPIO 42 | - |
-| Touch SDA | GPIO 19 | - |
-| Touch SCL | GPIO 20 | - |
-| Touch Reset | GPIO 38 | - |
-
----
-
-## 🔗 **Nützliche Links Amir Mobasheraghdam**
-
-### **Offizielle Repositories:**
-1. **LovyanGFX**: https://github.com/lovyan03/LovyanGFX
-2. **LVGL**: https://github.com/lvgl/lvgl
-3. **Beispielprojekt**: https://github.com/HarryVienna/Makerfabs-Sunton-ESP32-S3-7-Display-with-LovyanGFX-and-LVGL
-4. https://buchshop.bod.de/ergebnis-automation-fuer-die-bundesliga-mit-n8n-amir-mobasheraghdam-9783695724925
-5. https://amzn.eu/d/0aAtg00j
-
-### **Dokumentation:**
-- LVGL Docs: https://docs.lvgl.io
-- ESP32-S3 Technical Reference: https://www.espressif.com
-
-### **Kaufquellen:**
-- Tinytronics: https://www.tinytronics.nl
-- Makerfabs: https://www.makerfabs.com
-
----
-
-## 🎯 **Erster Test (Einfarbiger Bildschirm)**
-
-```cpp
-// Minimaler Test ohne LVGL
-#include <LovyanGFX.hpp>
-LGFX tft;
-
-void setup() {
-    // Backlight einschalten
-    pinMode(2, OUTPUT);
-    digitalWrite(2, HIGH);
-    
-    // Display initialisieren
-    tft.init();
-    
-    // Roter Bildschirm (10 Sekunden)
-    tft.fillScreen(TFT_RED);
-    delay(10000);
-    
-    // Grüner Bildschirm
-    tft.fillScreen(TFT_GREEN);
-    delay(5000);
-    
-    // Text anzeigen
-    tft.setTextColor(TFT_WHITE);
-    tft.setTextSize(3);
-    tft.setCursor(100, 200);
-    tft.println("TEST OK!");
-}
-
-void loop() {}
-```
-
----
-
-## 📞 **Support**
-
-Bei Problemen:
-1. **Serial Monitor** öffnen (115200 Baud)
-2. Fehlermeldungen dokumentieren
-3. GitHub Issue erstellen
-4. ESP32 Forum konsultieren
-
-**Viel Erfolg mit Ihrem Jingcai ESP32-8048S070C Display!** 🚀
-
