@@ -1,3 +1,11 @@
+
+
+<p align="center">
+  <img src="docs/images/sunton-esp32-s3-lvgl-7inch-rgb-touch.svg" alt="Sunton ESP32-S3 7-inch 800 by 480 RGB LVGL capacitive touch display illustration" width="960" />
+</p>
+
+<sub>Illustrative engineering overview (not a photograph, measured CAD rendering, or independently verified build).</sub>
+
 ## 📋 **Technische Daten**
 - **Mikrocontroller**: ESP32-S3 (240MHz, 16MB Flash, 8MB PSRAM)
 - **Display**: 7 Zoll TN-Panel, 800×480 Pixel, RGB565-Schnittstelle
